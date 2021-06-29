@@ -79,7 +79,7 @@ class TSCoreSample:
 ### Core Functions ###
 
 def get_seas_params(byte_data: bytearray, byte_offset: int, specific_parameter: Optional[int] = None) -> (
-Union[TSCoreSample, np.float32], int):
+        Union[TSCoreSample, np.float32], int):
     # Use a higher-performance memoryview (no copy)
     byte_data = memoryview(byte_data)
 
@@ -154,7 +154,7 @@ Union[TSCoreSample, np.float32], int):
     return {"row": row, "col": col, "vals": output_value, "offset": output_offset}
 
 
-def read_in(file_path: str, specific_parameter: Optional[int] = None, debug: Optional[bool] = False):
+def tpa_read_in(file_path: str, specific_parameter: Optional[int] = None, debug: Optional[bool] = False):
     ### Open and Read In the File ###
 
     # Open the file using OS
@@ -204,7 +204,7 @@ def read_in(file_path: str, specific_parameter: Optional[int] = None, debug: Opt
             len(pixel_array), len(pixel_array[0]), len(pixel_array[0][0])))
 
     # Run the function to get all the seasonal parameters for each pixel
-    next_offset = 24                # First 24 bits are occupied by the "header"
+    next_offset = 24  # First 24 bits are occupied by the "header"
     while next_offset < data_size:
         # Call function that gets the seasonal parameters for an unknown pixel (that hasn't been seen yet)
         output = get_seas_params(byte_data=data, byte_offset=next_offset, specific_parameter=specific_parameter)
