@@ -198,6 +198,7 @@ def tpa_read_in(file_path: str, specific_parameter: Optional[int] = None, debug:
 
     # Create a numpy array to store the data in
     pixel_array = np.ndarray((num_of_seasons, rowstop, colstop), dtype=np.float32)
+    pixel_array.fill(np.float32(0))
 
     if debug:
         print("[DEBUG] Created data array:\n\tSeasons: {}\n\tRows: {}\n\tColumns: {}\n".format(
@@ -209,9 +210,8 @@ def tpa_read_in(file_path: str, specific_parameter: Optional[int] = None, debug:
         # Call function that gets the seasonal parameters for an unknown pixel (that hasn't been seen yet)
         output = get_seas_params(byte_data=data, byte_offset=next_offset, specific_parameter=specific_parameter)
 
-        # Write seasons to the given "pixel"
-        for i in range(0, len(output["vals"])):
-            pixel_array[i][output["row"] - 1][output["col"] - 1] = output["vals"][i]
+        # Write samples to the given "pixel" without an explicit loop
+        pixel_array[:, output["row"] - 1, output["col"] - 1] = output["vals"]
 
         # Reset the next offset based on the value calculated by the get_seas_params function
         next_offset = output["offset"]
