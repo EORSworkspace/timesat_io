@@ -154,7 +154,33 @@ def get_seas_params(byte_data: bytearray, byte_offset: int, specific_parameter: 
     return {"row": row, "col": col, "vals": output_value, "offset": output_offset}
 
 
-def tpa_read_in(file_path: str, specific_parameter: Optional[int] = None, debug: Optional[bool] = False):
+def get_time_series(byte_data: bytearray, byte_offset: int, num_samples: int) -> np.ndarray:
+    # Use a higher-performance memoryview (no copy)
+    byte_data = memoryview(byte_data)
+
+    # Grab "header" information using specified bytes
+    row = np.frombuffer(buffer=byte_data[byte_offset:byte_offset + 4],
+                        dtype=np.uint32)[0]
+
+    col = np.frombuffer(buffer=byte_data[byte_offset + 4:byte_offset + 8],
+                        dtype=np.uint32)[0]
+
+    # Data Offset
+    data_offset = byte_offset + 8
+
+    # Data End Offset (non-inclusive)
+    # Note: Multiply by 4 because 32/8 == 4. Floats are 32-bit, bytes are 8 bits.
+    end_offset = data_offset + int(num_samples * 4)
+
+    # Convert byte slice into a numpy array of float32 values
+    vals = np.frombuffer(buffer=byte_data[data_offset:end_offset],
+                         dtype=np.float32)
+
+    # Return dictionary containing pixel information and time series values
+    return {"row": row, "col": col, "vals": vals, "offset": end_offset}
+
+
+def tpa_read_in(file_path: str, specific_parameter: Optional[int] = None, debug: Optional[bool] = False) -> np.ndarray:
     ### Open and Read In the File ###
 
     # Open the file using OS
@@ -209,6 +235,69 @@ def tpa_read_in(file_path: str, specific_parameter: Optional[int] = None, debug:
     while next_offset < data_size:
         # Call function that gets the seasonal parameters for an unknown pixel (that hasn't been seen yet)
         output = get_seas_params(byte_data=data, byte_offset=next_offset, specific_parameter=specific_parameter)
+
+        # Write samples to the given "pixel" without an explicit loop
+        pixel_array[:, output["row"] - 1, output["col"] - 1] = output["vals"]
+
+        # Reset the next offset based on the value calculated by the get_seas_params function
+        next_offset = output["offset"]
+
+    ### Return the Value ###
+    return pixel_array
+
+def tts_read_in(file_path: str, debug: Optional[bool] = False):
+    ### Open and Read In a .tts Time Series File ###
+
+    # Open the file using OS
+    with io.open(file_path, mode='rb', buffering=0) as file:
+        # Read all the data (no buffering) into a bytes object
+        data = file.readall()
+
+    # Store the size of the data (in bytes) for later use
+    data_size = len(data)
+
+    if debug:
+        print("[DEBUG] Data Type: {}".format(type(data)))
+        print("[DEBUG] Size (bytes): {}".format(data_size))
+
+    ### Decode "Header" for File-Wide Information ###
+
+    # The 'nyears' information resides in bytes 0 to 4 (exclusive)
+    nyears = np.frombuffer(buffer=data[0:4], dtype=np.uint32)[0]
+
+    # The 'nptperyear' or 'number of points per year' information resides in bytes 4 to 8 (exclusive)
+    nptperyear = np.frombuffer(buffer=data[4:8], dtype=np.uint32)[0]
+
+    # The 'rowstart' information resides in bytes 8 to 12 (exclusive)
+    rowstart = np.frombuffer(buffer=data[8:12], dtype=np.uint32)[0]
+
+    # The 'rowstop' information resides in bytes 12 to 16 (exclusive)
+    rowstop = np.frombuffer(buffer=data[12:16], dtype=np.uint32)[0]
+
+    # The 'colstart' information resides in bytes 16 to 20 (exclusive)
+    colstart = np.frombuffer(buffer=data[16:20], dtype=np.uint32)[0]
+
+    # The 'colstop' information resides in bytes 20 to 24 (exclusive)
+    colstop = np.frombuffer(buffer=data[20:24], dtype=np.uint32)[0]
+
+    ### Read Time Series Data for Each Pixel ###
+
+    # Come up with a 'total number of samples' value
+    total_samples = nyears * nptperyear
+
+    # Create a numpy array to store the data in
+    pixel_array = np.ndarray((total_samples, rowstop, colstop), dtype=np.float32)
+    pixel_array.fill(np.float32(0))
+
+    if debug:
+        print("[DEBUG] Created data array:\n\tSamples: {}\n\tRows: {}\n\tColumns: {}\n".format(
+            len(pixel_array), len(pixel_array[0]), len(pixel_array[0][0])))
+
+    # Run the function to get a time series (1D array) for each pixel
+    next_offset = 24
+    while next_offset < data_size:
+        # Run function to get all the time series samples for the given pixel at the offset
+        output = get_time_series(byte_data=data, byte_offset=next_offset, num_samples=total_samples)
 
         # Write samples to the given "pixel" without an explicit loop
         pixel_array[:, output["row"] - 1, output["col"] - 1] = output["vals"]
